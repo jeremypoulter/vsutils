@@ -22,7 +22,7 @@ class vsutils(object):
 		return clip.assvapour.Subtitle(
 			"{\\pos("+str(x)+","+str(y)+")}{\\an"+str(align)+"}" + message, 
 			style=font+","+str(size)+",&H00FFFFFF,&H000000FF,&H00000000,&H00000000,0,0,0,0,100,100,0,0,1,2,0,7,10,10,10,1",
-			debuglevel=7, blend=True)
+			blend=True)
 	
 	def Colorbars(self, width=640, height=480, fpsnum=25, fpsden=1, format=vs.RGB24, duration=600):
 		length = round((duration*fpsnum)/fpsden)
