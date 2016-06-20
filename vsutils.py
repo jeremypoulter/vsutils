@@ -1,5 +1,7 @@
 import vapoursynth as vs
 import math
+import functools
+import sys
 
 class vsutils(object):
 	def __init__(self):
@@ -18,11 +20,39 @@ class vsutils(object):
 		# return return the merged clip
 		return self.core.std.MaskedMerge(bottom, top, mask)
 	
-	def Subtitle(self, clip, message, x, y, font="sans-serif", size=20, align=7):
+	def Subtitle(self, clip, message, x, y, font="sans-serif", size=20, align=7, primary_colour="00FFFFFF", secondary_colour="00000000FF", outline_colour="00000000", back_colour="00000000"):
 		return clip.assvapour.Subtitle(
 			"{\\pos("+str(x)+","+str(y)+")}{\\an"+str(align)+"}" + message, 
-			style=font+","+str(size)+",&H00FFFFFF,&H000000FF,&H00000000,&H00000000,0,0,0,0,100,100,0,0,1,2,0,7,10,10,10,1",
+			style=font+","+str(size)+",&H"+primary_colour+",&H"+secondary_colour+",&H"+outline_colour+",&H"+back_colour+",0,0,0,0,100,100,0,0,1,2,0,7,10,10,10,1",
 			blend=True)
+	
+	def FadeEachFrame(self, clipa, clipb, n, number_frames):
+		weight = (n+1)/(number_frames+1)
+		return self.core.std.Merge(clipa, clipb, weight=[weight, weight])
+	
+	def FadeIn(self, clip, duration):
+		fps = clip.fps_num/clip.fps_den
+		number_frames = math.ceil(duration * fps)
+		return self.CrossFade(self.core.std.BlankClip(clip, length=number_frames), clip, duration)
+	
+	def FadeOut(self, clip, duration):
+		fps = clip.fps_num/clip.fps_den
+		number_frames = math.ceil(duration * fps)
+		return self.CrossFade(clip, self.core.std.BlankClip(clip, length=number_frames), duration)
+	
+	def CrossFade(self, clip1, clip2, duration):
+		fps = clip1.fps_num/clip1.fps_den
+		number_frames = math.floor(duration * fps) - 2
+		clip1_start_frame = clip1.num_frames - (number_frames + 1)
+		clip1_end_frame = clip1.num_frames - 1
+		clip2_start_frame = 1
+		clip2_end_frame = number_frames + 1
+		a=clip1[0:clip1_start_frame]
+		b1=clip1[clip1_start_frame:clip1_end_frame]
+		b2=clip2[clip2_start_frame:clip2_end_frame]
+		b=self.core.std.FrameEval(b1, functools.partial(self.FadeEachFrame, clipa=b1, clipb=b2, number_frames=number_frames))
+		c=clip2[clip2_end_frame:clip2.num_frames]
+		return a+b+c
 	
 	def Colorbars(self, width=640, height=480, fpsnum=25, fpsden=1, format=vs.RGB24, duration=600):
 		length = round((duration*fpsnum)/fpsden)
@@ -66,3 +96,22 @@ class vsutils(object):
 		colorbars = self.Overlay(colorbars, self.core.std.BlankClip(width=bottom_width_small, height=bottom_height, fpsnum=fpsnum, fpsden=fpsden, format=vs.RGB24, color=[25,25,25], length=length), (5 * top_width) + (bottom_width_small * 2), top_height + mid_height)
 		
 		return colorbars.resize.Point(format=format, matrix_s="709")
+
+	def GetFrameTime(self, clip, frame_number):
+		clip_fps = clip.fps_num / clip.fps_den
+		all_in_seconds = frame_number / clip_fps
+		minutes = math.floor(all_in_seconds / 60)
+		seconds = math.floor(all_in_seconds) % 60
+		milliseconds = math.floor((all_in_seconds - math.floor(all_in_seconds)) * 1000)
+		return "{:1.0f}:{:02.0f}.{:03.0f}".format(minutes, seconds, milliseconds)
+	
+	def TimeEachFrame(self, clip, n, x, y, align):
+		time = self.GetFrameTime(clip, n)
+		frame = str(n)
+		text = frame+" - "+time
+		
+		clip = self.Subtitle(clip, text, x, y, align=align)
+		return clip
+	
+	def ShowFrameAndTime(self, clip, x=0, y=0, align=7):
+		return clip.std.FrameEval(functools.partial(self.TimeEachFrame, clip=clip, x=x, y=y, align=align))
